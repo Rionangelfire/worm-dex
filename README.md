@@ -8,7 +8,7 @@ A Game Boy–style cheat sheet for dealing with a worm or malware infection, plu
 
 I wanted a cheat sheet that looks like a Pokédex and is easy to read under pressure. Each entry is one step of the response, with the real commands for Linux and PowerShell right there — tap a command to copy it. No test, no scoring, just the reference.
 
-I built it as a learning project while studying cybersecurity at CTU and working through Hack The Box. It's a personal tool, not a commercial product.
+I built it as a learning project while studying cybersecurity at CTU and starting out on Hack The Box. It's a personal tool, not a commercial product.
 
 ## The 12 entries
 
